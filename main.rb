@@ -26,6 +26,21 @@ OPCODE_MUL = 7
 OPCODE_RETURN = 8
 OPCODE_PRINT = 9
 
+OPERATOR_ASSIGN = 0
+OPERATORS = [
+    [0x3d], # '-'
+]
+
+ASCII_SPACE = 0x20
+ASCII_BACKSLASH = 0x5c
+ASCII_LOWER_A = 0x61
+ASCII_UPPER_A = 0x41
+ASCII_LOWER_Z = 0x7a
+ASCII_UPPER_Z = 0x5a
+ASCII_NULL = 0x00
+ASCII_NEW_LINE = 0x0A
+ASCII_UNDERSCORE = 0x5f
+
 # Global to store out evaluated byte code i.e our program
 bytecode = [] # our function stored as bytecodes
 
@@ -33,11 +48,62 @@ bytecode = [] # our function stored as bytecodes
 # comment? - returns true if the line is a comment
 def comment?(line)
     # yes this is crazy, but our language is going to suck like this
-    if line[0] == 0x5C
+    if line[0] == ASCII_BACKSLASH
         return true
     end
 
     return false
+end
+
+def read_whitespace(string, offset)
+    <<-COMMENT
+        A valid keyword is only a-z characters
+    COMMENT
+    cursor = offset
+    whitespace = []
+    continue = true
+
+    while continue
+        if string[cursor] == ASCII_SPACE
+            whitespace << ASCII_SPACE
+            cursor  = cursor + 1
+        end
+
+        if string[cursor] != ASCII_SPACE
+            continue = false
+        end
+    end
+
+    return whitespace
+end
+
+# read_keyword - reads what could be a valid keyword from an array of bytes and returns it as an array of bytes
+def read_keyword(string, offset)
+    <<-COMMENT
+        A valid keyword is only a-z characters
+    COMMENT
+    cursor = offset
+    keyword = []
+    continue = true
+    lower_char_range = [ASCII_LOWER_A, ASCII_LOWER_Z]
+
+    while continue
+        if string[cursor] != ASCII_SPACE
+            # we are nesting to avoid implementing && and || in our first pass of the language
+            if string[cursor] > lower_char_range[0] - 1
+                if string[cursor] < lower_char_range[1] + 1
+                    keyword << string[cursor]
+                    cursor = cursor + 1
+                end
+            end
+        end
+
+        if string[cursor] == ASCII_SPACE
+            continue = false
+        end
+    end
+
+    return keyword
 end
 
 # read_name - reads a valid name from an array of bytes and returns it as an array of bytes
@@ -45,11 +111,10 @@ def read_name(string, offset)
     cursor = offset
     name = []
     continue = true
-    lower_char_range = [0x61, 0x7A]
-    underscore_char = 0x5f
+    lower_char_range = [ASCII_LOWER_A, ASCII_LOWER_Z]
 
     while continue
-        if string[cursor] != space_char
+        if string[cursor] != ASCII_SPACE
             # we are nesting to avoid implementing && and || in our first pass of the language
             if string[cursor] > lower_char_range[0] - 1
                 if string[cursor] < lower_char_range[1] + 1
@@ -58,17 +123,81 @@ def read_name(string, offset)
             end
 
             # check for underscore and accept it
-            if string[cursor] == 0x5f 
+            if string[cursor] == ASCII_UNDERSCORE
                 name << string[cursor]
             end
+
+            cursor = cursor + 1
         end
 
-        if string[cursor] == space_char
+        if string[cursor] == ASCII_SPACE
+            continue = false
+        end
+    end
+
+    return name
+end
+
+def read_operator(string, offset)
+    cursor = offset
+    possible_operator = []
+    continue = true
+    while continue do
+        if string[cursor] == ASCII_SPACE
             continue = false
         end
 
+        if string[cursor] == ASCII_NEW_LINE
+            continue = false
+        end
+
+        if string[cursor] == ASCII_NULL
+            continue = false
+        end
+
+        # ELSE
+        if string[cursor] != ASCII_SPACE
+            if string[cursor] != ASCII_NEW_LINE
+                if string[cursor] != ASCII_NULL
+                    possible_operator << string[cursor]
+                    cursor = cursor + 1
+                end
+            end
+        end
+    end
+
+    return possible_operator
+end
+
+def read_remaining(string, offset)
+    cursor = offset
+    continue = true
+    remaining = []
+    while string[cursor]
+        if string[cursor] == ASCII_NULL
+            return remaining
+        end
+        
+        remaining << string[cursor]
         cursor = cursor + 1
     end
+end
+
+# str_compare - compares two null terminated arrays of characters
+def str_compare(a, b)
+    cursor = 0
+    continue = true
+    while continue do
+        if a[cursor] != b[cursor]
+            return false
+        end
+    end
+
+    return true
+end
+
+def len(array)
+    array.size
 end
 
 # var_dec? - returns true (0) if the line is a variable declaration
@@ -76,13 +205,12 @@ def var_dec?(line)
     # ignore leading whitespace
     cursor = 0
     continue = true
-    space_char = 0x20
     while continue do
-        if line[cursor] != space_char
+        if line[cursor] != ASCII_SPACE
             continue = false
         end
 
-        if line[cursor] == space_char
+        if line[cursor] == ASCII_SPACE
             cursor = cursor + 1
         end
     end
@@ -112,42 +240,35 @@ def eval_var_dec(line, bytecode)
     # ignore leading whitespace
     cursor = 0
     continue = true
-    space_char = 0x20
-    while continue do
-        if line[cursor] != space_char
-            continue = false
-        end
+    ignore = read_whitespace(line, cursor)
+    cursor = cursor + len(ignore)
 
-        if line[cursor] == space_char
-            cursor = cursor + 1
-        end
-    end
 
     # check for "set"
     s_char = 0x73
     if line[cursor] != s_char
-        return false
+        fail "Expected 'set' but name '#{line[cursor].chr}' found."
     end
     cursor = cursor + 1
 
     e_char = 0x65
     if line[cursor] != e_char
-        return false
+        fail "Expected 'set' but name 's' found."
     end
     cursor = cursor + 1
 
     t_char = 0x74
     if line[cursor] != t_char
-        return false
+        fail "Expected 'set' but name 'se' found."
     end
     cursor = cursor + 1
-    return true
 
     # check for a space before the name
-    if line[cursor] != space_char
-        return false
+    whitespace = read_whitespace(line, cursor)
+    if len(whitespace) == 0
+        fail "Missing whitespace"
     end
-    cursor = cursor + 1
+    cursor = cursor + len(whitespace)
 
     # now we need to check that there is a name and then a space
     # so we will run along until we find a space storing each character, if a character that isnt a-z or _ we will return false (1)
@@ -155,35 +276,63 @@ def eval_var_dec(line, bytecode)
     name = read_name(line, cursor)
 
     # a name must be at least one character
-    if name.size < 1
-        return false
+    if len(name) < 1
+        fail "Name not long enough"
     end
-    cursor = cursor + name.size
+    cursor = cursor + len(name)
 
-    # check for a space
-    if line[cursor] != space_char
-        return false
+    whitespace = read_whitespace(line, cursor)
+    if len(whitespace) == 0
+        fail "Missing whitespace"
     end
+    cursor = cursor + len(whitespace)
 
+
+    puts "about to read op"
+    operator = read_operator(line, cursor)
+    if operator?(operator) == false
+        fail "Expecting operator, got #{operator}"
+    end
+    cursor = cursor + len(operator)
+
+
+    puts "about to read wp"
+    whitespace = read_whitespace(string, cursor)
+    if len(whitespace) == 0
+        fail "Expected whitespace, got #{whitespage}"
+    end
+    cursor = cursor + len(whitespace)
+
+    puts "about to read remaining"
     # we will assume everything between the cursor and the end of the line will the value
-    value = []
-    continue = true
-    null_term_char = 0x00
-    while continue do
-        if line[cursor] != null_term_char
-            value << line[cursor]
-            cursor = cursor + 1
-        end
+    value = read_remaining(line, cursor)
 
-        if line[cursor] == null_term_char
-            continue = false
-        end
-    end
+
+    puts "Value: #{value}"
     
     code = [OPCODE_STORE_NAME, name, value]
     puts "Adding Bytecode: #{code}"
     bytecode << code
-    true 
+end
+
+def operator?(string)
+    continue = true
+    i = 0
+    operator_len = len(OPERATORS)
+    while continue
+
+        same = str_compare(string, OPERATORS[i])
+        if same == true
+            return true
+        end
+
+        i = i + 1
+        if operator_len < i
+            continue = false
+        end 
+    end
+
+    return false
 end
 
 # eval_line
@@ -204,25 +353,23 @@ end
 def eval_lines(lines, bytecode)
     reading_lines = true
     cursor = 0
-    newline_char = 0x0A
-    null_term_char = 0x00
     line_index = 0
     while reading_lines do
         line = []
         reading_single_line = true
         while reading_single_line do
-            if lines[cursor] == newline_char
+            if lines[cursor] == ASCII_NEW_LINE
                 reading_single_line = false
-                line << null_term_char
+                line << ASCII_NULL
             end
 
-            if lines[cursor] == null_term_char
+            if lines[cursor] == ASCII_NULL
                 reading_single_line = false
                 reading_lines = false
             end
 
-            if lines[cursor] != newline_char
-                if lines[cursor] != null_term_char
+            if lines[cursor] != ASCII_NEW_LINE
+                if lines[cursor] != ASCII_NULL
                     line << lines[cursor]
                 end
             end
@@ -232,6 +379,8 @@ def eval_lines(lines, bytecode)
 
         line_index = line_index + 1
         parsed = eval_line(line, bytecode)
+
+        ## ASSERT FOR DEV ONLY
         if parsed == false
             fail "Failed to parse line #{line_index}: #{line.pack('c*')}"
         end
@@ -245,7 +394,6 @@ def save_bytecode(bytecode)
     puts "saving bytecode"
     open('byte.code', 'w') do |file|
         bytecode.each do |code|
-            puts code
             file.puts code
         end
     end
