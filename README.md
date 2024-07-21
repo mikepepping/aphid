@@ -24,7 +24,7 @@ It is not intended for serious use.
 
 ## Why is the implementation so weird?
 I want to be able to implement the language in itself in the end.
-To do this, I need to avoid using data structures and features I do no want to build yet where practicable, such as (but not limited to):
+To do this, I need to avoid using data structures and features I do not want to build yet where practicable, such as (but not limited to):
  * hash tables
  * strings
  * classes and modules
