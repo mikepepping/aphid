@@ -8,8 +8,9 @@
 # Example code:
 example = <<-EXAMPLE.encode('ASCII')
 \\ comment
-set x = 1
-set y = 2\0
+set x_pos = 1
+set y_pos = 2
+\0
 EXAMPLE
 example = example.bytes
 
@@ -23,12 +24,12 @@ OPCODE_ADD = 4
 OPCODE_SUB = 5
 OPCODE_DIV = 6
 OPCODE_MUL = 7
-OPCODE_RETURN = 8
-OPCODE_PRINT = 9
+OPCODE_PRINT = 8
+OPCODE_HALT = 9
 
 OPERATOR_ASSIGN = 0
 OPERATORS = [
-    [0x3d], # '-'
+    '='.bytes,
 ]
 
 ASCII_SPACE = 0x20
@@ -45,6 +46,15 @@ ASCII_UNDERSCORE = 0x5f
 bytecode = [] # our function stored as bytecodes
 
 
+# halt? - returns true if the line is the end of execution (EOF/NULL TERMINATED STRING)
+def halt?(line)
+    if line[0] == ASCII_NULL
+        return true
+    end
+
+    false
+end
+
 # comment? - returns true if the line is a comment
 def comment?(line)
     # yes this is crazy, but our language is going to suck like this
@@ -56,9 +66,6 @@ def comment?(line)
 end
 
 def read_whitespace(string, offset)
-    <<-COMMENT
-        A valid keyword is only a-z characters
-    COMMENT
     cursor = offset
     whitespace = []
     continue = true
@@ -79,9 +86,6 @@ end
 
 # read_keyword - reads what could be a valid keyword from an array of bytes and returns it as an array of bytes
 def read_keyword(string, offset)
-    <<-COMMENT
-        A valid keyword is only a-z characters
-    COMMENT
     cursor = offset
     keyword = []
     continue = true
@@ -185,11 +189,22 @@ end
 
 # str_compare - compares two null terminated arrays of characters
 def str_compare(a, b)
+    if len(a) != len(b)
+        return false
+    end
+
     cursor = 0
     continue = true
+    len_a = len(a)
     while continue do
+
         if a[cursor] != b[cursor]
             return false
+        end
+
+        cursor = cursor + 1
+        if(cursor > len_a)
+            continue = false
         end
     end
 
@@ -215,25 +230,13 @@ def var_dec?(line)
         end
     end
 
-    # check for "set"
-    s_char = 0x73
-    if line[cursor] != s_char
+    set_keyword = read_keyword(line, cursor)
+    
+    if str_compare(set_keyword, 'set'.bytes) == false
         return false
     end
-    cursor = cursor + 1
 
-    e_char = 0x65
-    if line[cursor] != e_char
-        return false
-    end
-    cursor = cursor + 1
-
-    t_char = 0x74
-    if line[cursor] != t_char
-        return false
-    end
-    cursor = cursor + 1
-    return true
+    true
 end
 
 def eval_var_dec(line, bytecode)
@@ -245,23 +248,12 @@ def eval_var_dec(line, bytecode)
 
 
     # check for "set"
-    s_char = 0x73
-    if line[cursor] != s_char
-        fail "Expected 'set' but name '#{line[cursor].chr}' found."
+    set_keyword = read_keyword(line, cursor)
+    if str_compare(set_keyword, 'set'.bytes) == false
+        fail "Expected 'set', found #{set_keyword}"
     end
-    cursor = cursor + 1
+    cursor = cursor + len(set_keyword)
 
-    e_char = 0x65
-    if line[cursor] != e_char
-        fail "Expected 'set' but name 's' found."
-    end
-    cursor = cursor + 1
-
-    t_char = 0x74
-    if line[cursor] != t_char
-        fail "Expected 'set' but name 'se' found."
-    end
-    cursor = cursor + 1
 
     # check for a space before the name
     whitespace = read_whitespace(line, cursor)
@@ -280,6 +272,7 @@ def eval_var_dec(line, bytecode)
         fail "Name not long enough"
     end
     cursor = cursor + len(name)
+    debugger
 
     whitespace = read_whitespace(line, cursor)
     if len(whitespace) == 0
@@ -287,31 +280,22 @@ def eval_var_dec(line, bytecode)
     end
     cursor = cursor + len(whitespace)
 
-
-    puts "about to read op"
     operator = read_operator(line, cursor)
     if operator?(operator) == false
         fail "Expecting operator, got #{operator}"
     end
     cursor = cursor + len(operator)
 
-
-    puts "about to read wp"
-    whitespace = read_whitespace(string, cursor)
+    whitespace = read_whitespace(line, cursor)
     if len(whitespace) == 0
         fail "Expected whitespace, got #{whitespage}"
     end
     cursor = cursor + len(whitespace)
 
-    puts "about to read remaining"
     # we will assume everything between the cursor and the end of the line will the value
     value = read_remaining(line, cursor)
 
-
-    puts "Value: #{value}"
-    
     code = [OPCODE_STORE_NAME, name, value]
-    puts "Adding Bytecode: #{code}"
     bytecode << code
 end
 
@@ -320,7 +304,6 @@ def operator?(string)
     i = 0
     operator_len = len(OPERATORS)
     while continue
-
         same = str_compare(string, OPERATORS[i])
         if same == true
             return true
@@ -337,8 +320,13 @@ end
 
 # eval_line
 # line array[byte] - an array of bytes representing a line, should be null terminated, ascii only, should not contain return characters
-def eval_line(line, bytecode)
+def lex_line(line, bytecode)
     if comment?(line)
+        return true
+    end
+
+    if halt?(line)
+        bytecode << [OPCODE_HALT]
         return true
     end
 
@@ -350,7 +338,7 @@ def eval_line(line, bytecode)
 end
 
 
-def eval_lines(lines, bytecode)
+def lex_lines(lines, bytecode)
     reading_lines = true
     cursor = 0
     line_index = 0
@@ -366,6 +354,7 @@ def eval_lines(lines, bytecode)
             if lines[cursor] == ASCII_NULL
                 reading_single_line = false
                 reading_lines = false
+                line << lines[cursor]
             end
 
             if lines[cursor] != ASCII_NEW_LINE
@@ -378,20 +367,20 @@ def eval_lines(lines, bytecode)
         end
 
         line_index = line_index + 1
-        parsed = eval_line(line, bytecode)
+        parsed = lex_line(line, bytecode)
 
         ## ASSERT FOR DEV ONLY
         if parsed == false
             fail "Failed to parse line #{line_index}: #{line.pack('c*')}"
         end
+        
         puts "Line [#{line_index}]: #{line}"
     end
 
-    puts "finished eval"
 end
 
 def save_bytecode(bytecode)
-    puts "saving bytecode"
+    puts __method__.to_s
     open('byte.code', 'w') do |file|
         bytecode.each do |code|
             file.puts code
@@ -400,6 +389,6 @@ def save_bytecode(bytecode)
 end
 
 
-eval_lines(example, bytecode)
+lex_lines(example, bytecode)
 puts "bytecode: #{bytecode}"
 save_bytecode(bytecode)
