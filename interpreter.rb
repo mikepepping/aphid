@@ -76,29 +76,27 @@ class Interpreter
       when Codes::PUSH_VAL
         var_name = line.split(Codes::PUSH_VAL).last.strip
         error!("#{Codes::PUSH_VAL} called with no arguments") if blank?(var_name)
-        error!("#{Codes::PUSH_VAL} argument must be a string") unless string?(var_name)
+        error!("#{Codes::PUSH_VAL} argument must be a symbol") unless symbol?(var_name)
 
-        store_name = dequote_string(var_name)
-        error!("#{Codes::PUSH_VAL} called with blank name") if blank?(store_name)
 
-        stored = @values[store_name]
-        error!("#{Codes::PUSH_VAL} called but nothing stored as \"#{store_name}\"") unless stored
+        stored = @values[var_name]
+        error!("#{Codes::PUSH_VAL} called but nothing stored as \"#{var_name}\"") unless stored
 
         stack.push(stored)
       when Codes::STORE_VALUE
         error!("#{Codes::STORE_VALUE} called but no values on stack") if @stack.empty?
 
         var_name = line.split(Codes::STORE_VALUE).last.strip
-        error!("#{Codes::STORE_VALUE} called with no arguments") if blank?(var_name)
-        error!("#{Codes::STORE_VALUE} argument must be a string") unless string?(var_name)
+        debugger
+        error!("#{Codes::STORE_VALUE} argument must be a symbol") unless symbol?(var_name)
 
-        store_name = dequote_string(var_name)
-        stored = @values[store_name]
+        stored = @values[var_name]
         if stored && stored.type != top.value
           error!("#{Codes::STORE_VALUE} type mismatch")
         end
 
-        @values[store_name] = top
+        @values[var_name] = top
+        @stack.pop
       when Codes::ADD
         error!("#{Codes::ADD} called but requires at least two values on stack") if stack.size < 2
 
@@ -166,23 +164,20 @@ class Interpreter
     error!("Unknown type of `#{value}`")
   end
 
-  def string?(string)
-    string.is_a?(String) && string =~ /^"/ && string =~ /"$/
+  def string?(value)
+    value =~ /^".*"$/
   end
 
   def int?(value)
-    return false if string?(value)
-    return false if value.scan('.').size > 0
-
-    true
+    !!(value =~ /^[\d]+$/)
   end
 
   def float?(value)
-    return false if string?(value)
-    return false if int?(value)
-    return false if value.scan('.').size > 1
+    !!(value =~ /^\d+\.\d+$/)
+  end
 
-    true
+  def symbol?(value)
+    !!(value =~/^[a-z_\d]+$/)
   end
 
   def dequote_string(string)
