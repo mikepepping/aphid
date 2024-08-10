@@ -1,0 +1,12 @@
+  PUSH_LIT 10
+  STORE_VAL i
+  PUSH_VAL i
+  PUSH_LIT 1
+  SUB
+  PRINT
+  STORE_VAL i
+  PUSH_VAL i
+  PUSH_LIT 0
+  GT
+  JMP_T -8
+  HALT
