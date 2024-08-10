@@ -1,11 +1,12 @@
 require 'debug'
 class Interpreter
-  attr_reader :values, :stack, :current_line
+  attr_reader :values, :stack, :instruction_pointer, :lines
 
-  def init
+  def initialize(stream = nil)
+    @lines = stream&.readlines || []
     @stack = []
     @values = {}
-    @current_line = 0
+    @instruction_pointer = 0
   end
 
   module Codes
@@ -20,6 +21,12 @@ class Interpreter
     MUL = "MUL"
     DIV = "DIV"
     PRINT = "PRINT"
+    EQUAL = "EQ"
+    GREATER_THAN = "GT"
+    LESS_THAN = "LT"
+    JUMP = "JMP"
+    JUMP_TRUE = "JMP_T"
+    JUMP_FALSE = "JMP_F"
   end
 
   module Types
@@ -41,14 +48,17 @@ class Interpreter
     end
   end
 
-  def run(bytecode)
+  def run
     reset
 
-    bytecode.each_line do |line|
-      @current_line += 1
+    while(true) do
+      line = @lines[@instruction_pointer]
+      @instruction_pointer += 1
+
+      error!('unexpected end of program') if line == nil
       next if blank?(line)
 
-      code = line.strip.scan(/^[\w_]+/).first
+      code = line.strip.scan(/^[\w_;]+/).first
       case code
       when Codes::COMMENT
         next
@@ -87,7 +97,6 @@ class Interpreter
         error!("#{Codes::STORE_VALUE} called but no values on stack") if @stack.empty?
 
         var_name = line.split(Codes::STORE_VALUE).last.strip
-        debugger
         error!("#{Codes::STORE_VALUE} argument must be a symbol") unless symbol?(var_name)
 
         stored = @values[var_name]
@@ -132,6 +141,75 @@ class Interpreter
         error!("#{Codes::PRINT} called but nothing on stack") if stack.empty?
 
         print top.value
+      when Codes::EQUAL
+        error!("#{Codes::EQUAL} called but requires at least two values on stack") if stack.size < 2
+
+        first_val, second_val = @stack.pop(2)
+        if first_val.type != second_val.type
+          @stack.push(Value.new(0, Types::INT))
+          next
+        end
+
+        @stack.push(Value.new(first_val.value == second_val.value ? 1 : 0, Types::INT))
+      when Codes::GREATER_THAN
+        error!("#{Codes::GREATER_THAN} called but requires at least two values on stack") if stack.size < 2
+
+        first_val, second_val = @stack.pop(2)
+        if first_val.type != second_val.type
+          error!("#{Codes::GREATER_THAN} called with mixed types")
+        end
+
+        @stack.push(Value.new(first_val.value > second_val.value ? 1 : 0, Types::INT))
+      when Codes::LESS_THAN
+        error!("#{Codes::LESS_THAN} called but requires at least two values on stack") if stack.size < 2
+
+        first_val, second_val = @stack.pop(2)
+        if first_val.type != second_val.type
+          error!("#{Codes::LESS_THAN} called with mixed types")
+        end
+
+        @stack.push(Value.new(first_val.value < second_val.value ? 1 : 0, Types::INT))
+      
+      when Codes::JUMP
+        relative = line.split(Codes::JUMP).last.strip
+        error!("#{Codes::JUMP} called with no arguments") if blank?(relative)
+        error!("#{Codes::JUMP} called with non integer value.") unless int?(relative)
+
+        jumps = relative.to_i
+        # because the @instruction_pointer points to the next instruction, it has already been moved past this instruction
+        # this means we must always offest our jumps by -1, otheriwse jumping back one will jump to this instruction
+        # jumping forward by one would jump to two beyond this instruction
+        @instruction_pointer += (relative.to_i - 1)
+      when Codes::JUMP_FALSE
+        relative = line.split(Codes::JUMP_FALSE).last.strip
+        error!("#{Codes::JUMP_FALSE} called but requires at least one value on stack") if stack.size.zero?
+        error!("#{Codes::JUMP_FALSE} called but stack param is not an int") unless top.type == Types::INT
+        error!("#{Codes::JUMP_FALSE} called with no arguments") if blank?(relative)
+        error!("#{Codes::JUMP_FALSE} called with non integer value.") unless int?(relative)
+
+        if top.value == 0
+          jumps = relative.to_i
+          # because the @instruction_pointer points to the next instruction, it has already been moved past this instruction
+          # this means we must always offest our jumps by -1, otheriwse jumping back one will jump to this instruction
+          # jumping forward by one would jump to two beyond this instruction
+          @instruction_pointer += (relative.to_i - 1)
+        end
+        pop
+      when Codes::JUMP_TRUE
+        relative = line.split(Codes::JUMP_TRUE).last.strip
+        error!("#{Codes::JUMP_TRUE} called but requires at least one value on stack") if stack.size.zero?
+        error!("#{Codes::JUMP_TRUE} called but stack param is not an int") unless top.type == Types::INT
+        error!("#{Codes::JUMP_TRUE} called with no arguments") if blank?(relative)
+        error!("#{Codes::JUMP_TRUE} called with non integer value.") unless int?(relative)
+
+        if top.value.positive?
+          jumps = relative.to_i
+          # because the @instruction_pointer points to the next instruction, it has already been moved past this instruction
+          # this means we must always offest our jumps by -1, otheriwse jumping back one will jump to this instruction
+          # jumping forward by one would jump to two beyond this instruction
+          @instruction_pointer += (relative.to_i - 1)
+        end
+        pop
       else
         error!("Unknown bytecode")
       end
@@ -143,7 +221,7 @@ class Interpreter
   private
 
   def error!(message)
-    raise "#{message} at line #{@current_line}"
+    raise "#{message} running instruction #{@instruction_pointer}"
   end
 
   def reset
@@ -154,6 +232,10 @@ class Interpreter
 
   def top
     @stack.last
+  end
+
+  def pop
+    @stack.pop
   end
 
   def type_of(value)
@@ -169,11 +251,11 @@ class Interpreter
   end
 
   def int?(value)
-    !!(value =~ /^[\d]+$/)
+    !!(value =~ /^(\-|\+){0,1}[\d]+$/)
   end
 
   def float?(value)
-    !!(value =~ /^\d+\.\d+$/)
+    !!(value =~ /^(\-|\+){0,1}\d+\.\d+$/)
   end
 
   def symbol?(value)
