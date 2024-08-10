@@ -1,12 +1,23 @@
-  PUSH 10
-  STORE i
-  PUSH i
-  PUSH 1
-  SUB
-  PRINT
-  STORE i
-  PUSH i
-  PUSH 0
-  GT
-  JMP_T -8
-  HALT
+; Init i as 10
+PUSH 10
+STORE i
+; Loop until i is 0
+PUSH i
+PUSH 1
+SUB
+PRINT
+STORE i
+PUSH i
+PUSH 0
+GT
+JMP_T -8
+; IF-ELSE
+PUSH 1
+PUSH 2
+EQ
+; If they are equal continue else jump 2 instructions to PUSH "FALSE"
+JMP_F 2
+PUSH "TRUE"
+PUSH "FALSE"
+PRINT
+HALT
