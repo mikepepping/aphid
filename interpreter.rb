@@ -14,9 +14,8 @@ class Interpreter
     COMMENT = ";"
     HALT = "HALT"
     POP = "POP"
-    PUSH_LITERAL = "PUSH_LIT"
-    STORE_VALUE = "STORE_VAL"
-    PUSH_VAL = "PUSH_VAL"
+    PUSH = "PUSH"
+    STORE = "STORE"
     ADD = "ADD"
     SUB = "SUB"
     MUL = "MUL"
@@ -34,6 +33,7 @@ class Interpreter
     STRING = "string"
     INT = "int"
     FLOAT = "float"
+    SYMBOL = "symbol"
   end
 
   class Value
@@ -71,40 +71,34 @@ class Interpreter
         error!("#{POP} called but nothing on stack") if stack.empty?
 
         @stack.pop
-      when Codes::PUSH_LITERAL
-        literal = line.split(Codes::PUSH_LITERAL).last.strip
-        error!("#{Codes::PUSH_LITERAL} called with no arguments") if blank?(literal)
+      when Codes::PUSH
+        param = line.split(Codes::PUSH).last.strip
+        error!("#{Codes::PUSH} called with no arguments") if blank?(param)
 
-        type = type_of(literal)
-        case type
+        type = type_of(param)
+        value = case type
         when Types::STRING
-          literal = dequote_string(literal)
+          Value.new(dequote_string(param), Types::STRING)
         when Types::INT
-          literal = literal.to_i
+          Value.new(param.to_i, Types::INT)
         when Types::FLOAT
-          literal = literal.to_f
+          Value.new(param.to_f, Types::FLOAT)
+        when Types::SYMBOL
+          stored = @values[param]
+          error!("#{PUSH} called with symbol but nothing stored againsted symbol '#{param}'") unless stored
+          Value.new(stored.value, stored.type)
         end
 
-        stack.push(Value.new(literal, type))
-      when Codes::PUSH_VAL
-        var_name = line.split(Codes::PUSH_VAL).last.strip
-        error!("#{Codes::PUSH_VAL} called with no arguments") if blank?(var_name)
-        error!("#{Codes::PUSH_VAL} argument must be a symbol") unless symbol?(var_name)
+        stack.push(value)
+      when Codes::STORE
+        error!("#{Codes::STORE} called but no values on stack") if @stack.empty?
 
-
-        stored = @values[var_name]
-        error!("#{Codes::PUSH_VAL} called but nothing stored as \"#{var_name}\"") unless stored
-
-        stack.push(stored)
-      when Codes::STORE_VALUE
-        error!("#{Codes::STORE_VALUE} called but no values on stack") if @stack.empty?
-
-        var_name = line.split(Codes::STORE_VALUE).last.strip
-        error!("#{Codes::STORE_VALUE} argument must be a symbol") unless symbol?(var_name)
+        var_name = line.split(Codes::STORE).last.strip
+        error!("#{Codes::STORE} argument must be a symbol") unless symbol?(var_name)
 
         stored = @values[var_name]
         if stored && stored.type != top.type
-          error!("#{Codes::STORE_VALUE} type mismatch")
+          error!("#{Codes::STORE} type mismatch")
         end
 
         @values[var_name] = top
@@ -245,6 +239,7 @@ class Interpreter
     return Types::STRING if string?(value)
     return Types::INT if int?(value)
     return Types::FLOAT if float?(value)
+    return Types::SYMBOL if symbol?(value)
 
     error!("Unknown type of `#{value}`")
   end

@@ -1,12 +1,12 @@
-  PUSH_LIT 10
-  STORE_VAL i
-  PUSH_VAL i
-  PUSH_LIT 1
+  PUSH 10
+  STORE i
+  PUSH i
+  PUSH 1
   SUB
   PRINT
-  STORE_VAL i
-  PUSH_VAL i
-  PUSH_LIT 0
+  STORE i
+  PUSH i
+  PUSH 0
   GT
   JMP_T -8
   HALT
