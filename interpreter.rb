@@ -10,6 +10,7 @@ class Interpreter
   end
 
   module Codes
+    DEBUG = "DBG"
     COMMENT = ";"
     HALT = "HALT"
     POP = "POP"
@@ -64,6 +65,8 @@ class Interpreter
         next
       when Codes::HALT
         return
+      when Codes::DEBUG
+        debugger
       when Codes::POP
         error!("#{POP} called but nothing on stack") if stack.empty?
 
@@ -100,12 +103,12 @@ class Interpreter
         error!("#{Codes::STORE_VALUE} argument must be a symbol") unless symbol?(var_name)
 
         stored = @values[var_name]
-        if stored && stored.type != top.value
+        if stored && stored.type != top.type
           error!("#{Codes::STORE_VALUE} type mismatch")
         end
 
         @values[var_name] = top
-        @stack.pop
+        pop
       when Codes::ADD
         error!("#{Codes::ADD} called but requires at least two values on stack") if stack.size < 2
 
