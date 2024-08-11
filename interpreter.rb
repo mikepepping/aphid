@@ -233,7 +233,20 @@ class Interpreter
         push(io, Types::IO)
         push(io.size, Types::INT)
       when Codes::READ
-        # WARNING all IO is read as bytes no matter the mode you choose
+        # WARNING: all IO is read as bytes no matter the mode you choose
+        # EXAMPLE:
+        # PUSH "example.txt"
+        # PUSH "r"
+        # OPEN
+        # STORE file_len
+        # STORE open_file
+        # PUSH open_file
+        # PUSH file_len
+        # ; now we have the IO and its length on the stack
+        # READ ; this will read the whole file into the stack
+        # PUSH open_file
+        # CLOSE ; now the file is closed
+
         error!("#{Codes::READ} called but requires at least two values on stack") if stack.size < 2
         io, read_len = pop(2)
 
