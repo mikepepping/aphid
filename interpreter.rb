@@ -18,6 +18,7 @@ class Interpreter
     POP = "POP"
     PUSH = "PUSH"
     STORE = "STORE"
+    CLEAR = "CLR"
 
     # Arithmatic
     ADD = "ADD"
@@ -131,6 +132,13 @@ class Interpreter
 
         @values[var_name] = top
         pop
+      when Codes::CLEAR
+        error!("#{Codes::CLEAR} called but no values on stack") if @stack.empty?
+
+        var_name = line.split(Codes::CLEAR).last.strip
+        error!("#{Codes::CLEAR} argument must be a symbol") unless symbol?(var_name)
+
+        @values.delete(var_name)
       when Codes::ADD
         error!("#{Codes::ADD} called but requires at least two values on stack") if stack.size < 2
 
@@ -256,7 +264,8 @@ class Interpreter
         # PUSH open_file
         # PUSH file_len
         # ; now we have the IO and its length on the stack
-        # READ ; this will read the whole file into the stack
+        # ; this will read the whole file into the stack
+        # READ 
         # PUSH open_file
         # CLOSE ; now the file is closed
 
@@ -290,11 +299,21 @@ class Interpreter
         #      After writing the top most value with be an INT of how many bytes where written.
         # EXAMPLE - writting "hi" to an open IO stored as open_file, we push "hi\0" onto the stack so that "h" is top and "i" then "\0"
         #           are underneath. Then push the io "open_file" and and write 3 stack times to it. The top of the stack is now 3
-        # PUSH 105  ; "i" 
-        # PUSH 104  ; "h"
+        #
+        # ; push "i" onto the stack
+        # PUSH 105
+        # ; push "h"
+        # PUSH 104
+        # ; push the file onto the stack
         # PUSH open_file
-        # PUSH 3 ; we have 3 bytes to write
+        # ; push the number of bytes we want to write
+        # PUSH 2 ; we have 2 bytes to write
         # WRITE
+        # ;now the top of the stack is how many bytes we wrote, we will discard it
+        # POP
+        # ; push the file onto the stack and close it
+        # PUSH open_file
+        # CLOSE
         error!("#{Codes::WRITE} called but requires at least two values on stack") if stack.size < 2
         io, write_len = pop(2)
         error!("#{Codes::WRITE} called but parameter is not an IO (top of stack is not an IO)") unless io.type == Types::IO && io.value.is_a?(IO)

@@ -55,7 +55,6 @@ READ
 STORE read_len
 FRAME
 PUSH open_file
-FRAME
 CLOSE
-FRAME
+CLR open_file
 HALT
