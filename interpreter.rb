@@ -10,28 +10,41 @@ class Interpreter
   end
 
   module Codes
-    DEBUG = "DBG"
+    # Ignored
     COMMENT = ";"
+
+    # Core Stack instructions
     HALT = "HALT"
     POP = "POP"
     PUSH = "PUSH"
     STORE = "STORE"
+
+    # Arithmatic
     ADD = "ADD"
     SUB = "SUB"
     MUL = "MUL"
     DIV = "DIV"
-    PRINT = "PRINT"
+
+    # Comparisions
     EQUAL = "EQ"
     GREATER_THAN = "GT"
     LESS_THAN = "LT"
+
+    # Branching
     JUMP = "JMP"
     JUMP_TRUE = "JMP_T"
     JUMP_FALSE = "JMP_F"
+
+    # File Operations
     OPEN = "OPEN"
     READ = "READ"
     WRITE = "WRITE"
     CLOSE = "CLOSE"
-    FRAME = "FRAME"
+
+    # Debugging
+    PRINT = "PRINT"
+    DEBUG = "DBG" # opens a ruby debug repl
+    FRAME = "FRAME" # this prints the current stack as well as the current instruction pointer
   end
 
   module Types
@@ -55,7 +68,7 @@ class Interpreter
     end
 
     def to_s
-      "{ value: #{value}, type: #{type} }"
+      "#{type.capitalize}: #{value}"
     end
   end
 
@@ -79,7 +92,7 @@ class Interpreter
         debugger
       when Codes::FRAME
         puts "# FRAME - #{instruction_pointer}"
-        puts stack
+        puts stack.reverse # print it reversed so its easier to visualise i.e first printed is the top
         puts "# FRAME END"
 
       when Codes::POP
