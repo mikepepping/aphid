@@ -1,6 +1,6 @@
-# Aphid
+# Aphid 🦗
 
-This language is just for the learning experience of writing a stackbased, bytecode backed language.
+This language is just for the learning experience of writing a stackbased interpreted language.
 
 It is not intended for serious use.
 
