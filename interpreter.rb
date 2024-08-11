@@ -27,6 +27,11 @@ class Interpreter
     JUMP = "JMP"
     JUMP_TRUE = "JMP_T"
     JUMP_FALSE = "JMP_F"
+    OPEN = "OPEN"
+    READ = "READ"
+    WRITE = "WRITE"
+    CLOSE = "CLOSE"
+    FRAME = "FRAME"
   end
 
   module Types
@@ -34,6 +39,7 @@ class Interpreter
     INT = "int"
     FLOAT = "float"
     SYMBOL = "symbol"
+    IO = "io"
   end
 
   class Value
@@ -46,6 +52,10 @@ class Interpreter
 
     def update(value)
       @value = value
+    end
+
+    def to_s
+      "{ value: #{value}, type: #{type} }"
     end
   end
 
@@ -67,10 +77,15 @@ class Interpreter
         return
       when Codes::DEBUG
         debugger
+      when Codes::FRAME
+        puts "# FRAME - #{instruction_pointer}"
+        puts stack
+        puts "# FRAME END"
+
       when Codes::POP
         error!("#{POP} called but nothing on stack") if stack.empty?
 
-        @stack.pop
+        pop
       when Codes::PUSH
         param = line.split(Codes::PUSH).last.strip
         error!("#{Codes::PUSH} called with no arguments") if blank?(param)
@@ -141,7 +156,7 @@ class Interpreter
       when Codes::EQUAL
         error!("#{Codes::EQUAL} called but requires at least two values on stack") if stack.size < 2
 
-        first_val, second_val = @stack.pop(2)
+        first_val, second_val = pop(2)
         if first_val.type != second_val.type
           @stack.push(Value.new(0, Types::INT))
           next
@@ -151,7 +166,7 @@ class Interpreter
       when Codes::GREATER_THAN
         error!("#{Codes::GREATER_THAN} called but requires at least two values on stack") if stack.size < 2
 
-        first_val, second_val = @stack.pop(2)
+        first_val, second_val = pop(2)
         if first_val.type != second_val.type
           error!("#{Codes::GREATER_THAN} called with mixed types")
         end
@@ -160,7 +175,7 @@ class Interpreter
       when Codes::LESS_THAN
         error!("#{Codes::LESS_THAN} called but requires at least two values on stack") if stack.size < 2
 
-        first_val, second_val = @stack.pop(2)
+        first_val, second_val = pop(2)
         if first_val.type != second_val.type
           error!("#{Codes::LESS_THAN} called with mixed types")
         end
@@ -207,6 +222,82 @@ class Interpreter
           @instruction_pointer += (relative.to_i - 1)
         end
         pop
+      when Codes::OPEN
+        error!("#{Codes::OPEN} called but requires at least two values on stack [path, mode]") if stack.size < 2
+        path, mode = pop(2)
+        
+        error!("#{Codes::OPEN} called but mode is not string") unless mode.type == Types::STRING
+        error!("#{Codes::OPEN} called but path is not string") unless path.type == Types::STRING
+
+        io = open(path.value, mode.value)
+        push(io, Types::IO)
+        push(io.size, Types::INT)
+      when Codes::READ
+        # WARNING all IO is read as bytes no matter the mode you choose
+        error!("#{Codes::READ} called but requires at least two values on stack") if stack.size < 2
+        io, read_len = pop(2)
+
+        error!("#{Codes::READ} called but io parameter is not an IO") unless io.type == Types::IO && io.value.is_a?(IO)
+        error!("#{Codes::READ} called but read len paramter is not an INT") unless read_len.type == Types::INT
+
+        read_len = read_len.value.to_i
+        # When a read happens, it will push all bytes onto the stack
+        # the top value will be the amount of bytes read
+        # the following values are the bytes in the order where the first read byte is at the top of the stack
+        # followed by all subsequent bytes in order
+        read = io.value.read(read_len)
+        if read.nil?
+          push(0, Types::INT)
+          next
+        end
+
+        bytes = read.bytes
+        bytes.reverse.each do |byte|
+          push(byte, Types::INT)
+        end
+        push(bytes.size, Types::INT)
+      when Codes::WRITE
+        # WARNING: all IO is written as bytes no matter the mode you choose
+        # MAN: to write bytes to IO, you must push them on in the order to be written, with the first byte at the top
+        #      then push the IO ontop of the stack, then push the IO and an INT 'n', where n is the number of bytes (stack items) to write.
+        #      You can call WRITE and it will then WRITE the n stack items to the file.
+        #      After writing the top most value with be an INT of how many bytes where written.
+        # EXAMPLE - writting "hi" to an open IO stored as open_file, we push "hi\0" onto the stack so that "h" is top and "i" then "\0"
+        #           are underneath. Then push the io "open_file" and and write 3 stack times to it. The top of the stack is now 3
+        # PUSH 105  ; "i" 
+        # PUSH 104  ; "h"
+        # PUSH open_file
+        # PUSH 3 ; we have 3 bytes to write
+        # WRITE
+        error!("#{Codes::WRITE} called but requires at least two values on stack") if stack.size < 2
+        io, write_len = pop(2)
+        error!("#{Codes::WRITE} called but parameter is not an IO (top of stack is not an IO)") unless io.type == Types::IO && io.value.is_a?(IO)
+        error!("#{Codes::WRITE} called but write len parameted is not an INT") unless write_len.type == Types::INT
+
+
+        write_len = write_len.value.to_i
+        error!("#{Codes::WRITE} write count larger than stack") unless write_len >= stack.size
+
+        bytes_written = 0
+        write_len.times do
+          value = pop
+          error!("#{Codes::WRITE} encountered non int value") unless value.type == Types::INT
+
+          byte = value.value
+          error!("#{Codes::WRITE} attempting to write value larger than a byte") unless byte >= -128 && byte <= 255
+
+          io.value.write([byte].pack('C*'))
+          bytes_written += 1
+        end
+
+        push(bytes_written, Types::INT)
+      when Codes::CLOSE
+        # Closing an IO does not push anything onto the stack
+        error!("#{Codes::CLOSE} called but requires at least on value on stack") if stack.empty?
+        io = pop
+        error!("#{Codes::CLOSE} called but parameter is not an IO (top of stack is not an IO)") unless io.type == Types::IO && io.value.is_a?(IO)
+
+        io.value.close
       else
         error!("Unknown bytecode")
       end
@@ -231,8 +322,18 @@ class Interpreter
     @stack.last
   end
 
-  def pop
-    @stack.pop
+  def push(value, type)
+    @stack.push(Value.new(value, type))
+  end
+
+  def pop(n=1)
+    return @stack.pop if n == 1
+
+    @stack.pop(n)
+  end
+
+  def code_args(line, code)
+    line.split(code).last.split(',').map(&:strip)
   end
 
   def type_of(value)

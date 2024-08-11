@@ -20,4 +20,42 @@ JMP_F 2
 PUSH "TRUE"
 PUSH "FALSE"
 PRINT
+POP
+; Example of writing and reading from an IO
+PUSH "bob.txt"
+PUSH "w"
+OPEN
+; discard the file size
+POP
+; store the file handler
+STORE open_file
+; push our string onto the stack
+PUSH 105
+PUSH 104
+; push the file hander back onto the stack
+PUSH open_file
+; push how many bytes to write onto the stack
+PUSH 2
+; write the bytes to the file
+WRITE
+; discard how many bytes where writted
+POP
+; push the file back onto the stack
+PUSH open_file
+; close the file
+CLOSE
+PUSH "bob.txt"
+PUSH "r"
+OPEN
+STORE file_len
+STORE open_file
+PUSH open_file
+PUSH file_len
+READ
+STORE read_len
+FRAME
+PUSH open_file
+FRAME
+CLOSE
+FRAME
 HALT
