@@ -15,3 +15,4 @@ It is not intended for serious use.
  - [x] can compare values ==, >, <
  - [x] can define and execute conditional loops
  - [x] can define and execute if-else
+ - [x] can read and write files
